@@ -15,3 +15,9 @@ alter table bets enable row level security;
 create policy "own profile" on profiles for all using (id = auth.uid()) with check (id = auth.uid());
 create policy "own bankrolls" on bankrolls for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy "own bets" on bets for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- Table permissions (required on newer Supabase projects)
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on public.profiles  to authenticated;
+grant select, insert, update, delete on public.bankrolls to authenticated;
+grant select, insert, update, delete on public.bets      to authenticated;
