@@ -69,7 +69,7 @@ function render(){charts.forEach(c=>c.destroy());charts=[];$('#app').innerHTML=(
  if(page==='Analytics'){const s=group('sport'),t=group('type'),sk=Object.keys(s),tk=Object.keys(t),st=stats();
   chart('a1',{type:'bar',data:{labels:sk,datasets:[{label:'profit',data:sk.map(k=>s[k].p),backgroundColor:'#2563eb'}]},options:co});
   chart('a2',{type:'bar',data:{labels:tk,datasets:[{label:'profit',data:tk.map(k=>t[k].p),backgroundColor:'#2563eb'}]},options:co});
-  chart('a3',{type:'bar',data:{labels:sk,datasets:[{label:'won',data:sk.map(k=>s[k].w),backgroundColor:'#10b981'},{label:'lost',data:sk.map(k=>s[k].l),backgroundColor:'#ef4444'}]},options:{...co,indexAxis:'y',scales:{x:{...co.scales.x,stacked:true},y:{...co.scales.y,stacked:true}}}});
+  chart('a3',{type:'bar',data:{labels:sk,datasets:[{label:'won',data:sk.map(k=>+s[k].w||0),backgroundColor:'#10b981'},{label:'lost',data:sk.map(k=>+s[k].l||0),backgroundColor:'#ef4444'}]},options:{responsive:true,plugins:co.plugins,scales:{x:{type:'category',stacked:true,ticks:{color:'#6b7792'},grid:{color:'#1c2233'}},y:{type:'linear',stacked:true,beginAtZero:true,ticks:{color:'#6b7792',precision:0},grid:{color:'#1c2233'}}}}});
   chart('a4',{type:'pie',data:{labels:['Won','Lost','Push/Cancelled'],datasets:[{data:[st.w,st.l,S.bets.filter(b=>b.status==='push').length],backgroundColor:['#0088ff','#10b981','#f59e0b'],borderColor:'#111520'}]},options:{plugins:{legend:{labels:{color:'#8b97b3'}}}}})}
  if(page==='Calculators')calc()}
 function Dashboard(){const s=stats(),bal=S.capital+s.profit,rec=[...S.bets].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
