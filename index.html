@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BetWise Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--bg:#0a0d14;--card:#111520;--bd:#1c2233;--tx:#e8ecf5;--mu:#6b7792;--bl:#2563eb;--gr:#10b981;--rd:#ef4444}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px Inter,system-ui,sans-serif;display:flex;min-height:100vh}
+aside{width:210px;border-right:1px solid var(--bd);padding:14px;position:sticky;top:0;height:100vh;flex-shrink:0}
+.logo{font-weight:700;font-size:15px;margin-bottom:22px}.logo small{display:block;color:var(--mu);font-weight:400;font-size:11px}
+nav a{display:block;padding:9px 11px;border-radius:8px;color:var(--mu);cursor:pointer;margin-bottom:3px;font-weight:500}
+nav a.on,nav a:hover{background:#1a2030;color:var(--tx)}
+main{flex:1;padding:24px;min-width:0}h1{margin:0;font-size:24px}.sub{color:var(--mu);margin:2px 0 18px}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px}
+.grid{display:grid;gap:12px;margin-bottom:12px}.g2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}.g5{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+.lbl{color:var(--mu);font-size:11px;text-transform:uppercase;letter-spacing:.05em}.big{font-size:24px;font-weight:700;margin-top:4px}
+.g{color:var(--gr)}.r{color:var(--rd)}.b{color:#60a5fa}
+button,select,input{font:inherit;color:var(--tx);background:#0d111b;border:1px solid var(--bd);border-radius:8px;padding:8px 11px}
+button{cursor:pointer}button.p{background:var(--bl);border-color:var(--bl);font-weight:600}button.d{color:var(--rd)}
+input,select{width:100%}table{width:100%;border-collapse:collapse}th{color:var(--mu);font-size:11px;text-align:left;padding:8px;text-transform:uppercase}
+td{padding:10px 8px;border-top:1px solid var(--bd)}.tw{overflow-x:auto}
+.tag{padding:2px 8px;border-radius:6px;font-size:12px}.won{background:#10b98122;color:var(--gr)}.lost{background:#ef444422;color:var(--rd)}.pending{background:#2563eb22;color:#60a5fa}.push{background:#f59e0b22;color:#f59e0b}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}.tabs button.on{background:var(--bl)}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;max-width:560px}.cal div{padding:8px 2px;text-align:center;border-radius:8px;min-height:50px;font-size:12px}
+.cal .w{color:var(--mu);min-height:0}.cal .win{background:#10b98122;border:1px solid #10b98155}.cal .loss{background:#ef444422;border:1px solid #ef444455}
+.res{background:#eff6ff;color:#1e40af;padding:14px;border-radius:10px;text-align:center;font-weight:600;margin-top:12px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}canvas{max-height:300px}
+@media(max-width:700px){aside{display:none}body{display:block}main{padding:14px}.mnav{display:block!important}}
+.out aside,.out .mnav{display:none!important}.mnav{display:none;margin-bottom:12px}
+</style></head><body>
+<aside><div class="logo">BetWise Tracker<small>Smart Betting Analytics</small></div><nav id="nav"></nav><div id="usr" style="margin-top:20px;font-size:12px;color:var(--mu);word-break:break-all"></div></aside>
+<main><select class="mnav" id="mnav"></select><div id="app"></div></main>
+<script>
+const $=s=>document.querySelector(s);
+const PAGES=['Dashboard','Bankrolls','My Bets','Calendar','Analytics','Calculators'];
+// ===== CONFIG: paste your Supabase project values (Project Settings > API). Leave empty for single-device local mode.
+const SUPABASE_URL='https://kfmkmcyrsxkboosfwdvd.supabase.co',SUPABASE_KEY='sb_publishable_6glqqJjwdSLyED2_4kYCsw_ual8uJAO';
+const sb=SUPABASE_URL&&window.supabase?window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY):null;let user=null,booted=false;
+const D0={capital:5000,bankrolls:['Main'],bets:[]};
+let S=sb?{...D0}:JSON.parse(localStorage.getItem('betwise')||'null')||{...D0};
+let page='Dashboard',charts=[],calM=new Date(),tab='Odds Converter',flt={q:'',sport:''};
+const save=()=>{if(!sb)localStorage.setItem('betwise',JSON.stringify(S))};
+const cloud={
+ cap(){save();if(sb)sb.from('profiles').upsert({id:user.id,capital:S.capital}).then(()=>{})},
+ bank(n){save();if(sb)sb.from('bankrolls').insert({user_id:user.id,name:n}).then(()=>{})},
+ ins(rows){save();if(sb)sb.from('bets').insert(rows.map(r=>({...r,user_id:user.id}))).then(r=>r.error&&alert(r.error.message))},
+ upd(id,st){save();if(sb)sb.from('bets').update({status:st}).eq('id',id).then(()=>{})},
+ del(id){save();if(sb)sb.from('bets').delete().eq('id',id).then(()=>{})},
+ clear(){save();if(sb)sb.from('bets').delete().eq('user_id',user.id).then(()=>{})}};
+const f=n=>(n<0?'-':'')+'€'+Math.abs(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+const pr=b=>b.status==='won'?b.stake*(b.odds-1):b.status==='lost'?-b.stake:0;
+const settled=()=>S.bets.filter(b=>b.status==='won'||b.status==='lost');
+const sum=a=>a.reduce((x,y)=>x+y,0);
+const stats=(bets=S.bets)=>{const s=bets.filter(b=>b.status==='won'||b.status==='lost'),w=s.filter(b=>b.status==='won').length,p=sum(s.map(pr)),st=sum(s.map(b=>b.stake));
+ return{profit:p,w,l:s.length-w,wr:s.length?w/s.length*100:0,roi:st?p/st*100:0,avg:bets.length?sum(bets.map(b=>b.odds))/bets.length:0,n:bets.length}};
+function nav(){$('#nav').innerHTML=PAGES.map(p=>`<a class="${p===page?'on':''}" onclick="go('${p}')">${p}</a>`).join('');
+ $('#mnav').innerHTML=PAGES.map(p=>`<option ${p===page?'selected':''}>${p}</option>`).join('');$('#mnav').onchange=e=>go(e.target.value)}
+function go(p){page=p;nav();render()}
+function head(t,s,extra=''){return`<div class="top"><div><h1>${t}</h1><div class="sub">${s}</div></div>${extra}</div>`}
+function chart(id,cfg){charts.push(new Chart($('#'+id),cfg))}
+const co={responsive:true,plugins:{legend:{labels:{color:'#8b97b3'}}},scales:{x:{ticks:{color:'#6b7792'},grid:{color:'#1c2233'}},y:{ticks:{color:'#6b7792'},grid:{color:'#1c2233'}}}};
+const col=v=>v.map(x=>x>=0?'#10b981':'#ef4444');
+function byDay(){const m={};settled().forEach(b=>m[b.date]=(m[b.date]||0)+pr(b));return m}
+function group(key){const m={};settled().forEach(b=>{const k=b[key]||'other';m[k]=m[k]||{p:0,w:0,l:0};m[k].p+=pr(b);b.status==='won'?m[k].w++:m[k].l++});return m}
+function render(){charts.forEach(c=>c.destroy());charts=[];$('#app').innerHTML=({Dashboard,Bankrolls,'My Bets':Bets,Calendar,Analytics,Calculators})[page]();
+ if(page==='Dashboard'){const d=byDay(),k=Object.keys(d).sort();chart('c1',{type:'bar',data:{labels:k,datasets:[{data:k.map(x=>d[x]),backgroundColor:col(k.map(x=>d[x]))}]},options:{...co,plugins:{legend:{display:false}}}})}
+ if(page==='Analytics'){const s=group('sport'),t=group('type'),sk=Object.keys(s),tk=Object.keys(t),st=stats();
+  chart('a1',{type:'bar',data:{labels:sk,datasets:[{label:'profit',data:sk.map(k=>s[k].p),backgroundColor:'#2563eb'}]},options:co});
+  chart('a2',{type:'bar',data:{labels:tk,datasets:[{label:'profit',data:tk.map(k=>t[k].p),backgroundColor:'#2563eb'}]},options:co});
+  chart('a3',{type:'bar',data:{labels:sk,datasets:[{label:'won',data:sk.map(k=>s[k].w),backgroundColor:'#10b981'},{label:'lost',data:sk.map(k=>s[k].l),backgroundColor:'#ef4444'}]},options:{...co,indexAxis:'y',scales:{x:{...co.scales.x,stacked:true},y:{...co.scales.y,stacked:true}}}});
+  chart('a4',{type:'pie',data:{labels:['Won','Lost','Push/Cancelled'],datasets:[{data:[st.w,st.l,S.bets.filter(b=>b.status==='push').length],backgroundColor:['#0088ff','#10b981','#f59e0b'],borderColor:'#111520'}]},options:{plugins:{legend:{labels:{color:'#8b97b3'}}}}})}
+ if(page==='Calculators')calc()}
+function Dashboard(){const s=stats(),bal=S.capital+s.profit,rec=[...S.bets].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+ return head('Dashboard','Track your betting performance and profits',`<button class="p" onclick="go('My Bets');setTimeout(()=>$('#ev').focus(),50)">+ Place New Bet</button>`)+
+ `<div class="grid g2"><div class="card"><div class="lbl">Starting capital</div><div class="big">${f(S.capital)}</div><a class="b" style="cursor:pointer;font-size:12px" onclick="const v=prompt('Starting capital',S.capital);if(v&&+v>0){S.capital=+v;cloud.cap();render()}">Set starting capital</a></div>
+ <div class="card"><div class="lbl">Current balance</div><div class="big">${f(bal)}</div><span class="${s.profit>=0?'g':'r'}" style="font-size:12px">${s.profit>=0?'+':''}${f(s.profit)} from bets</span></div></div>
+ <div class="grid g5"><div class="card"><div class="lbl">Total profit</div><div class="big">${f(s.profit)}</div></div><div class="card"><div class="lbl">Win rate</div><div class="big">${s.wr.toFixed(1)}%</div><span class="g">${s.w}W</span> - <span class="r">${s.l}L</span></div>
+ <div class="card"><div class="lbl">ROI</div><div class="big">${s.roi.toFixed(1)}%</div></div><div class="card"><div class="lbl">Avg odds</div><div class="big">${s.avg.toFixed(2)}</div><span class="b">Across ${s.n} bets</span></div></div>
+ <div class="grid" style="grid-template-columns:2fr 1fr"><div class="card"><b>Daily Profit &amp; Loss</b><canvas id="c1"></canvas></div>
+ <div class="card"><b>Recent Bets</b>${rec.map(b=>`<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--bd);padding:8px 0"><div><b>${esc(b.event)}</b><div class="lbl">${b.sport} • ${f(b.stake)}</div></div><div style="text-align:right" class="${pr(b)>=0?'g':'r'}">${b.status==='pending'?'<span class="b">Pending</span>':f(pr(b))}<div><span class="tag ${b.status}">${b.status}</span></div></div></div>`).join('')||'<p class="sub">No bets yet.</p>'}</div></div>`}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function Bankrolls(){return head('Bankrolls','Manage multiple bankrolls and track distinct strategies',`<button class="p" onclick="const n=prompt('Bankroll name');if(n){S.bankrolls.push(n);cloud.bank(n);render()}">+ Add bankroll</button>`)+
+ `<div class="grid g2">${S.bankrolls.map(n=>{const bs=S.bets.filter(b=>b.bankroll===n),s=stats(bs);return`<div class="card"><b>${esc(n)}</b><div class="row" style="margin-top:10px"><div class="card" style="flex:1;text-align:center"><div class="lbl">ROI</div><div class="${s.roi>=0?'g':'r'}" style="font-size:18px">${s.roi.toFixed(2)}%</div></div><div class="card" style="flex:1;text-align:center"><div class="lbl">Profit</div><div class="${s.profit>=0?'g':'r'}" style="font-size:18px">${f(s.profit)}</div></div></div><p class="sub" style="margin:10px 0 0">${bs.filter(b=>b.status==='pending').length} pending bets</p></div>`}).join('')}</div>`}
+function Bets(){const sports=[...new Set(S.bets.map(b=>b.sport))],today=new Date().toISOString().slice(0,10);
+ let l=S.bets.filter(b=>(!flt.sport||b.sport===flt.sport)&&(!flt.q||(b.event+b.sel).toLowerCase().includes(flt.q.toLowerCase()))).sort((a,b)=>b.date.localeCompare(a.date));
+ return head('Betting History','Manage and track all your logged bets.',`<div class="row"><button onclick="demo()">Load demo data</button><button class="d" onclick="if(confirm('Delete all bets?')){S.bets=[];cloud.clear();render()}">Delete All Bets</button></div>`)+
+ `<div class="card" style="margin-bottom:12px"><b>Log New Bet</b><div class="form" style="margin-top:10px"><input id="dt" type="date" value="${today}"><input id="ev" placeholder="Event (e.g. Arsenal vs Chelsea)"><input id="sl" placeholder="Selection"><input id="sp" placeholder="Sport" list="sl2"><datalist id="sl2">${['soccer','basketball','hockey','football','tennis'].map(x=>`<option>${x}</option>`).join('')}</datalist>
+ <select id="ty">${['moneyline','spread','over under','prop','parlay'].map(x=>`<option>${x}</option>`).join('')}</select><input id="od" type="number" step="0.01" placeholder="Decimal odds"><input id="sk" type="number" step="0.01" placeholder="Stake"><select id="bk">${S.bankrolls.map(x=>`<option>${esc(x)}</option>`).join('')}</select></div><button class="p" onclick="addBet()">+ Log Bet</button></div>
+ <div class="row" style="margin-bottom:12px"><input style="flex:3" placeholder="Search events or selections..." value="${esc(flt.q)}" oninput="flt.q=this.value;clearTimeout(window.t);window.t=setTimeout(()=>{render();const i=document.querySelector('input[placeholder^=Search]');i.focus();i.setSelectionRange(99,99)},250)"><select style="flex:1" onchange="flt.sport=this.value;render()"><option value="">All Sports</option>${sports.map(x=>`<option ${flt.sport===x?'selected':''}>${x}</option>`).join('')}</select></div>
+ <div class="card tw"><table><tr><th>Date</th><th>Event</th><th>Selection</th><th>Odds</th><th>Stake</th><th>Status</th><th>Profit</th><th></th></tr>
+ ${l.map(b=>`<tr><td class="sub" style="white-space:nowrap">${b.date}</td><td><b>${esc(b.event)}</b><div class="lbl">${esc(b.sport)}</div></td><td>${esc(b.sel)}</td><td><b>${(+b.odds).toFixed(2)}</b></td><td>${f(b.stake)}</td>
+ <td><select style="width:auto" onchange="setSt('${b.id}',this.value)">${['pending','won','lost','push'].map(x=>`<option ${b.status===x?'selected':''}>${x}</option>`).join('')}</select></td><td class="${pr(b)>=0?'g':'r'}">${b.status==='pending'?'-':(pr(b)>=0?'+':'')+f(pr(b))}</td><td><button class="d" onclick="del('${b.id}')">✕</button></td></tr>`).join('')||'<tr><td colspan=8 class="sub">No bets found.</td></tr>'}</table></div>`}
+function addBet(){const g=i=>$('#'+i).value,o=+g('od'),k=+g('sk');if(!g('ev')||!(o>1)||!(k>0))return alert('Enter an event, decimal odds above 1, and a stake.');
+ const nb={id:crypto.randomUUID(),date:g('dt'),event:g('ev'),sel:g('sl'),sport:(g('sp')||'other').toLowerCase(),type:g('ty'),odds:o,stake:k,status:'pending',bankroll:g('bk')};S.bets.push(nb);cloud.ins([nb]);render()}
+const setSt=(id,v)=>{S.bets.find(b=>b.id===id).status=v;cloud.upd(id,v);render()};
+const del=id=>{S.bets=S.bets.filter(b=>b.id!==id);cloud.del(id);render()};
+function demo(){const rows=[],sp=['soccer','soccer','soccer','basketball','hockey','tennis','football'],ty=['moneyline','over under','prop','spread','parlay'],now=Date.now();
+ for(let i=0;i<40;i++){const o=+(1.3+Math.random()*.9).toFixed(2);rows.push({id:crypto.randomUUID(),date:new Date(now-Math.floor(i/2)*864e5).toISOString().slice(0,10),event:'Demo Match '+(i+1),sel:'Team to win',sport:sp[i%7],type:ty[i%5],odds:o,stake:250,status:Math.random()<.7?'won':'lost',bankroll:S.bankrolls[0]})}S.bets.push(...rows);cloud.ins(rows);render()}
+function Calendar(){const y=calM.getFullYear(),m=calM.getMonth(),first=(new Date(y,m,1).getDay()+6)%7,days=new Date(y,m+1,0).getDate(),d=byDay(),mk=`${y}-${String(m+1).padStart(2,'0')}`;
+ const mb=settled().filter(b=>b.date.startsWith(mk)),s=stats(mb);let cells='';for(let i=0;i<first;i++)cells+='<div></div>';
+ for(let i=1;i<=days;i++){const k=`${mk}-${String(i).padStart(2,'0')}`,v=d[k];cells+=`<div class="${v>0?'win':v<0?'loss':''}">${i}${v!==undefined?`<div class="${v>=0?'g':'r'}">${Math.abs(v)>=1000?(v/1000).toFixed(1)+'K':Math.round(v)}</div>`:''}</div>`}
+ return head('Profit calendar','Daily results at a glance')+`<div class="row" style="margin-bottom:12px"><button onclick="calM=new Date(${y},${m-1},1);render()">‹</button><b>${calM.toLocaleString('en',{month:'long',year:'numeric'})}</b><button onclick="calM=new Date(${y},${m+1},1);render()">›</button><button onclick="calM=new Date();render()">Today</button></div>
+ <div class="cal">${'MTWTFSS'.split('').map(x=>`<div class="w">${x}</div>`).join('')}${cells}</div>
+ <div class="grid g5" style="margin-top:14px;max-width:560px"><div class="card"><div class="lbl">Month profit</div><div class="big ${s.profit>=0?'g':'r'}">${f(s.profit)}</div></div><div class="card"><div class="lbl">Month bets</div><div class="big b">${mb.length}</div></div><div class="card"><div class="lbl">Win rate</div><div class="big b">${s.wr.toFixed(1)}%</div></div></div>`}
+function Analytics(){return head('Performance Analytics','Deep dive into your betting habits and performance',`<button class="p" onclick="exp()">Export Data</button>`)+
+ `<div class="grid g2"><div class="card"><b>Profit by Sport</b><canvas id="a1"></canvas></div><div class="card"><b>Profit by Bet Type</b><canvas id="a2"></canvas></div><div class="card"><b>Win/Loss by Sport</b><canvas id="a3"></canvas></div><div class="card"><b>Overall Bet Status</b><canvas id="a4"></canvas></div></div>`}
+function exp(){const h='date,event,selection,sport,type,odds,stake,status,profit',r=S.bets.map(b=>[b.date,b.event,b.sel,b.sport,b.type,b.odds,b.stake,b.status,pr(b)].map(x=>`"${String(x).replace(/"/g,'""')}"`).join(','));
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([[h,...r].join('\n')],{type:'text/csv'}));a.download='bets.csv';a.click()}
+// ---- calculators
+const TABS=['Odds Converter','Dutching','Surebet','Staking'];
+function Calculators(){return head('Betting Calculators','Tools to help you bet smarter and manage your bankroll.')+`<div class="tabs">${TABS.map(t=>`<button class="${t===tab?'on':''}" onclick="tab='${t}';render()">${t}</button>`).join('')}</div><div class="card" id="cb"></div>`}
+function calc(){const c=$('#cb'),N=id=>+$('#'+id).value;
+ if(tab==='Odds Converter'){c.innerHTML=`<b>Odds &amp; Probability Converter</b><div class="form" style="margin-top:12px"><div>American<input id="am" placeholder="+150"></div><div>Decimal<input id="de" placeholder="2.50"></div><div>Fractional<input id="fr" placeholder="3/2"></div></div><div class="res" id="ip">Implied Probability: –</div>`;
+  const set=d=>{if(!(d>1)){$('#ip').textContent='Implied Probability: –';return}
+   $('#de').value=d.toFixed(2);$('#am').value=d>=2?'+'+Math.round((d-1)*100):'-'+Math.round(100/(d-1));
+   let best=[1,1],err=9;for(let q=1;q<=20;q++){const p=Math.round((d-1)*q);if(p>0&&Math.abs(p/q-(d-1))<err-1e-9){err=Math.abs(p/q-(d-1));best=[p,q]}}$('#fr').value=best.join('/');
+   $('#ip').textContent='Implied Probability: '+(100/d).toFixed(2)+'%'};
+  $('#am').oninput=e=>{const a=parseFloat(e.target.value);if(a)set(a>0?1+a/100:1+100/Math.abs(a))};
+  $('#de').oninput=e=>set(+e.target.value);
+  $('#fr').oninput=e=>{const[p,q]=e.target.value.split('/').map(Number);if(p&&q)set(1+p/q)}}
+ if(tab==='Dutching'){c.innerHTML=`<b>Dutching</b><p class="sub">Equal profit across outcomes.</p><div class="form"><div>Total stake<input id="ts" type="number" value="100"></div><div>Odds (comma separated)<input id="os" value="2.5, 3.2, 4"></div></div><div id="o"></div>`;
+  const u=()=>{const o=$('#os').value.split(',').map(Number).filter(x=>x>1),t=N('ts'),ip=sum(o.map(x=>1/x));if(o.length<2)return;
+   $('#o').innerHTML=o.map((x,i)=>`<div>Outcome ${i+1} @ ${x}: <b>${f(t/x/ip)}</b></div>`).join('')+`<div class="res">Return ${f(t/ip)} · Profit ${f(t/ip-t)} (${((1/ip-1)*100).toFixed(2)}%)</div>`};
+  c.oninput=u;u()}
+ if(tab==='Surebet'){c.innerHTML=`<b>Surebet (2-way arbitrage)</b><div class="form" style="margin-top:12px"><div>Odds A<input id="a" type="number" step=".01" value="2.10"></div><div>Odds B<input id="b" type="number" step=".01" value="2.05"></div><div>Total stake<input id="ts" type="number" value="1000"></div></div><div id="o"></div>`;
+  const u=()=>{const a=N('a'),b=N('b'),t=N('ts');if(!(a>1&&b>1))return;const m=1/a+1/b,sa=t/a/m,sb=t/b/m;
+   $('#o').innerHTML=`<div>Stake A: <b>${f(sa)}</b> · Stake B: <b>${f(sb)}</b></div><div class="res">${m<1?`Surebet! Guaranteed profit ${f(t/m-t)} (${((1/m-1)*100).toFixed(2)}%)`:`No arbitrage (book sums to ${(m*100).toFixed(1)}%)`}</div>`};c.oninput=u;u()}
+ if(tab==='Staking'){c.innerHTML=`<b>Kelly Criterion</b><div class="form" style="margin-top:12px"><div>Bankroll<input id="bk" type="number" value="${(S.capital+stats().profit).toFixed(0)}"></div><div>Decimal odds<input id="d" type="number" step=".01" value="2.00"></div><div>Your win probability %<input id="p" type="number" value="55"></div><div>Kelly fraction<select id="k"><option value="1">Full</option><option value=".5" selected>Half</option><option value=".25">Quarter</option></select></div></div><div id="o"></div>`;
+  const u=()=>{const d=N('d'),p=N('p')/100,k=+$('#k').value,bk=N('bk'),fr=((d-1)*p-(1-p))/(d-1)*k;
+   $('#o').innerHTML=`<div class="res">${fr>0?`Stake ${(fr*100).toFixed(2)}% of bankroll = ${f(fr*bk)}`:'No edge — don\'t bet'}</div>`};c.oninput=u;u()}}
+// ---- auth + boot
+function authUI(){$('#app').innerHTML=`<div class="card" style="max-width:360px;margin:8vh auto"><h1>BetWise Tracker</h1><div class="sub">Smart betting analytics</div><div class="form" style="grid-template-columns:1fr"><input id="em" type="email" placeholder="Email"><input id="pw" type="password" placeholder="Password (6+ characters)"></div><div class="row"><button class="p" onclick="auth('in')">Sign in</button><button onclick="auth('up')">Create account</button></div><p id="am2" class="sub"></p></div>`}
+async function auth(m){const c={email:$('#em').value,password:$('#pw').value};
+ const{data,error}=m==='in'?await sb.auth.signInWithPassword(c):await sb.auth.signUp(c);
+ $('#am2').textContent=error?error.message:(m==='up'&&!data.session?'Check your email to confirm your account, then sign in.':'')}
+async function start(u){user=u||null;document.body.classList.toggle('out',!u);charts.forEach(c=>c.destroy());charts=[];
+ if(!u)return authUI();
+ $('#usr').innerHTML=esc(u.email)+'<br><a style="cursor:pointer;color:#60a5fa" onclick="sb.auth.signOut()">Logout</a>';
+ const[p,b,t]=await Promise.all([sb.from('profiles').select('capital').eq('id',u.id).maybeSingle(),sb.from('bankrolls').select('name').order('created_at'),sb.from('bets').select('*').order('date',{ascending:false}).limit(5000)]);
+ S.capital=p.data?+p.data.capital:5000;S.bankrolls=b.data&&b.data.length?b.data.map(x=>x.name):['Main'];S.bets=t.data||[];
+ if(!b.data||!b.data.length)cloud.bank('Main');
+ nav();render()}
+if(sb){sb.auth.onAuthStateChange((e,se)=>{const u=se&&se.user;if(booted&&(u&&u.id)===(user&&user.id))return;booted=true;setTimeout(()=>start(u),0)})}
+else{nav();render()}
+</script></body></html>
