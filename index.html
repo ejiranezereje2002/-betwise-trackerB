@@ -28,7 +28,13 @@ td{padding:10px 8px;border-top:1px solid var(--bd)}.tw{overflow-x:auto}
 .res{background:#eff6ff;color:#1e40af;padding:14px;border-radius:10px;text-align:center;font-weight:600;margin-top:12px}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}canvas{max-height:300px}
 @media(max-width:700px){aside{display:none}body{display:block}main{padding:14px}.mnav{display:block!important}}
-.out aside,.out .mnav{display:none!important}.mnav{display:none;margin-bottom:12px}
+.out aside,.out .mnav{display:none!important}.calh{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;margin-bottom:14px}.calh button{width:auto}
+.cal2{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}.wd{text-align:center;color:var(--mu);font-weight:600;font-size:12px;padding:8px 0}
+.c2{border:1px solid var(--bd);background:#0d111b;border-radius:8px;min-height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:600;cursor:pointer;gap:2px}
+.c2 small{font-size:11px}.c2.win{background:#10b98122;border-color:#10b98188;color:var(--gr)}.c2.loss{background:#ef444422;border-color:#ef444488;color:var(--rd)}
+.c2.tod{border-color:#60a5fa}.c2.sel{outline:2px solid #60a5fa}.c2.off{opacity:.25;cursor:default}
+@media(max-width:700px){.c2{min-height:44px;font-size:12px}}
+.mnav{display:none;margin-bottom:12px}
 </style></head><body>
 <aside><div class="logo">BetWise Tracker<small>Smart Betting Analytics</small></div><nav id="nav"></nav><div id="usr" style="margin-top:20px;font-size:12px;color:var(--mu);word-break:break-all"></div></aside>
 <main><select class="mnav" id="mnav"></select><div id="app"></div></main>
@@ -98,12 +104,25 @@ const setSt=(id,v)=>{S.bets.find(b=>b.id===id).status=v;cloud.upd(id,v);render()
 const del=id=>{S.bets=S.bets.filter(b=>b.id!==id);cloud.del(id);render()};
 function demo(){const rows=[],sp=['soccer','soccer','soccer','basketball','hockey','tennis','football'],ty=['moneyline','over under','prop','spread','parlay'],now=Date.now();
  for(let i=0;i<40;i++){const o=+(1.3+Math.random()*.9).toFixed(2);rows.push({id:crypto.randomUUID(),date:new Date(now-Math.floor(i/2)*864e5).toISOString().slice(0,10),event:'Demo Match '+(i+1),sel:'Team to win',sport:sp[i%7],type:ty[i%5],odds:o,stake:250,status:Math.random()<.7?'won':'lost',bankroll:S.bankrolls[0]})}S.bets.push(...rows);cloud.ins(rows);render()}
-function Calendar(){const y=calM.getFullYear(),m=calM.getMonth(),first=(new Date(y,m,1).getDay()+6)%7,days=new Date(y,m+1,0).getDate(),d=byDay(),mk=`${y}-${String(m+1).padStart(2,'0')}`;
- const mb=settled().filter(b=>b.date.startsWith(mk)),s=stats(mb);let cells='';for(let i=0;i<first;i++)cells+='<div></div>';
- for(let i=1;i<=days;i++){const k=`${mk}-${String(i).padStart(2,'0')}`,v=d[k];cells+=`<div class="${v>0?'win':v<0?'loss':''}">${i}${v!==undefined?`<div class="${v>=0?'g':'r'}">${Math.abs(v)>=1000?(v/1000).toFixed(1)+'K':Math.round(v)}</div>`:''}</div>`}
- return head('Profit calendar','Daily results at a glance')+`<div class="row" style="margin-bottom:12px"><button onclick="calM=new Date(${y},${m-1},1);render()">‹</button><b>${calM.toLocaleString('en',{month:'long',year:'numeric'})}</b><button onclick="calM=new Date(${y},${m+1},1);render()">›</button><button onclick="calM=new Date();render()">Today</button></div>
- <div class="cal">${'MTWTFSS'.split('').map(x=>`<div class="w">${x}</div>`).join('')}${cells}</div>
- <div class="grid g5" style="margin-top:14px;max-width:560px"><div class="card"><div class="lbl">Month profit</div><div class="big ${s.profit>=0?'g':'r'}">${f(s.profit)}</div></div><div class="card"><div class="lbl">Month bets</div><div class="big b">${mb.length}</div></div><div class="card"><div class="lbl">Win rate</div><div class="big b">${s.wr.toFixed(1)}%</div></div></div>`}
+let calSel=null;
+const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const sg=v=>(v>=0?'+':'-')+f(Math.abs(v)).replace('€','$');
+function Calendar(){const y=calM.getFullYear(),m=calM.getMonth(),first=new Date(y,m,1).getDay(),days=new Date(y,m+1,0).getDate(),d=byDay(),mk=`${y}-${String(m+1).padStart(2,'0')}`,td=iso(new Date());
+ if(!calSel||!calSel.startsWith(mk))calSel=td.startsWith(mk)?td:mk+'-01';
+ const mb=S.bets.filter(b=>b.date.startsWith(mk)),mp=sum(mb.map(pr)),prev=new Date(y,m,0).getDate(),rows=Math.ceil((first+days)/7)*7;let cells='';
+ for(let i=0;i<rows;i++){const n=i-first+1;
+  if(n<1||n>days){cells+=`<div class="c2 off">${n<1?prev+n:n-days}</div>`;continue}
+  const k=`${mk}-${String(n).padStart(2,'0')}`,v=d[k],cl=(v>0?'win':v<0?'loss':'')+(k===calSel?' sel':'')+(k===td?' tod':'');
+  cells+=`<div class="c2 ${cl}" onclick="calSel='${k}';render()">${n}${v!==undefined&&v!==0?`<small>${Math.abs(v)>=1000?(v/1000).toFixed(1)+'K':(v>0?'+':'')+Math.round(v)}</small>`:''}</div>`}
+ const db=S.bets.filter(b=>b.date===calSel),dp=sum(db.map(pr)),cnt=x=>db.filter(b=>b.status===x).length;
+ const label=new Date(calSel+'T00:00:00').toLocaleDateString('en',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+ return `<div style="max-width:760px;margin:0 auto"><div style="text-align:center;margin-bottom:16px"><h1>📅 Profit Calendar</h1><div class="sub" style="margin:2px 0 0">Track your daily betting performance</div></div>
+ <div class="card"><div class="calh"><button onclick="calM=new Date(${y},${m-1},1);render()">‹</button><b style="font-size:18px">${calM.toLocaleString('en',{month:'long',year:'numeric'})}</b><div class="row" style="justify-content:flex-end"><button onclick="calM=new Date();calSel=iso(new Date());render()">Today</button><button onclick="calM=new Date(${y},${m+1},1);render()">›</button></div></div>
+ <div class="cal2">${'SMTWTFS'.split('').map(x=>`<div class="wd">${x}</div>`).join('')}${cells}</div></div>
+ <div class="grid g2" style="margin-top:12px"><div class="card" style="text-align:center"><div class="lbl" style="font-size:13px">Month profit</div><div class="big ${mp>=0?'g':'r'}" style="font-size:30px">${sg(mp)}</div></div><div class="card" style="text-align:center"><div class="lbl" style="font-size:13px">Month bets</div><div class="big b" style="font-size:30px">${mb.length}</div></div></div>
+ <div class="card"><b style="font-size:17px">${label}</b>
+ <div class="card row" style="justify-content:space-between;margin:12px 0;background:#0d111b"><div><div class="sub" style="margin:0">Daily Profit</div><div class="big ${dp>=0?'g':'r'}">${sg(dp)}</div></div><div class="row"><span class="tag won">${cnt('won')} Won</span><span class="tag lost" style="background:var(--rd);color:#fff">${cnt('lost')} Lost</span><span class="tag pending">${cnt('pending')} Pending</span></div></div>
+ ${db.map(b=>`<div class="card row" style="justify-content:space-between;margin-bottom:8px;background:#0d111b"><div><b>${esc(b.sel||b.event)}</b><div class="sub" style="margin:0">${esc(b.sport||'')} • ${esc(b.event)}</div><div class="lbl" style="text-transform:none">${esc(b.bankroll||'')} • Odds: ${(+b.odds).toFixed(2)} • Stake: ${f(b.stake).replace('€','$')}</div></div><div style="text-align:right"><span class="tag ${b.status}">${b.status}</span><div class="big ${pr(b)>=0?'g':'r'}" style="font-size:18px">${b.status==='pending'?'–':sg(pr(b))}</div></div></div>`).join('')||'<p class="sub">No bets on this day.</p>'}</div></div>`}
 function Analytics(){return head('Performance Analytics','Deep dive into your betting habits and performance',`<button class="p" onclick="exp()">Export Data</button>`)+
  `<div class="grid g2"><div class="card"><b>Profit by Sport</b><canvas id="a1"></canvas></div><div class="card"><b>Profit by Bet Type</b><canvas id="a2"></canvas></div><div class="card"><b>Win/Loss by Sport</b><canvas id="a3"></canvas></div><div class="card"><b>Overall Bet Status</b><canvas id="a4"></canvas></div></div>`}
 function exp(){const h='date,event,selection,sport,type,odds,stake,status,profit',r=S.bets.map(b=>[b.date,b.event,b.sel,b.sport,b.type,b.odds,b.stake,b.status,pr(b)].map(x=>`"${String(x).replace(/"/g,'""')}"`).join(','));
