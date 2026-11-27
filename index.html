@@ -34,6 +34,12 @@ td{padding:10px 8px;border-top:1px solid var(--bd)}.tw{overflow-x:auto}
 .c2 small{font-size:11px}.c2.win{background:#10b98122;border-color:#10b98188;color:var(--gr)}.c2.loss{background:#ef444422;border-color:#ef444488;color:var(--rd)}
 .c2.tod{border-color:#60a5fa}.c2.sel{outline:2px solid #60a5fa}.c2.off{opacity:.25;cursor:default}
 @media(max-width:700px){.c2{min-height:44px;font-size:12px}}
+.ov{position:fixed;inset:0;background:#000b;display:flex;align-items:center;justify-content:center;padding:14px;z-index:50}
+.md{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:20px;width:100%;max-width:480px;max-height:92vh;overflow:auto}
+.form2{display:grid;grid-template-columns:1fr 1fr;gap:12px}.form2 .sp{grid-column:1/-1}.form2 label{display:block;color:var(--mu);font-size:11px;margin-bottom:4px}
+.sch{position:relative;flex:3;min-width:200px}.sch span{position:absolute;left:12px;top:8px;color:var(--mu)}.sch input{padding-left:34px}
+.chip{font-size:12px;padding:6px 12px;color:var(--mu);width:auto}.chip.d{color:var(--rd)}
+.si{display:inline-flex;width:18px;height:18px;border-radius:50%;border:1.5px solid;align-items:center;justify-content:center;font-size:10px;margin-right:6px}
 .mnav{display:none;margin-bottom:12px}
 </style></head><body>
 <aside><div class="logo">BetWise Tracker<small>Smart Betting Analytics</small></div><nav id="nav"></nav><div id="usr" style="margin-top:20px;font-size:12px;color:var(--mu);word-break:break-all"></div></aside>
@@ -53,6 +59,7 @@ const cloud={
  bank(n){save();if(sb)sb.from('bankrolls').insert({user_id:user.id,name:n}).then(()=>{})},
  ins(rows){save();if(sb)sb.from('bets').insert(rows.map(r=>({...r,user_id:user.id}))).then(r=>r.error&&alert(r.error.message))},
  upd(id,st){save();if(sb)sb.from('bets').update({status:st}).eq('id',id).then(()=>{})},
+ updRow(id,r){save();if(sb)sb.from('bets').update(r).eq('id',id).then(x=>x.error&&alert(x.error.message))},
  del(id){save();if(sb)sb.from('bets').delete().eq('id',id).then(()=>{})},
  clear(){save();if(sb)sb.from('bets').delete().eq('user_id',user.id).then(()=>{})}};
 const f=n=>(n<0?'-':'')+'€'+Math.abs(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -79,7 +86,7 @@ function render(){charts.forEach(c=>c.destroy());charts=[];$('#app').innerHTML=(
   chart('a4',{type:'pie',data:{labels:['Won','Lost','Push/Cancelled'],datasets:[{data:[st.w,st.l,S.bets.filter(b=>b.status==='push').length],backgroundColor:['#0088ff','#10b981','#f59e0b'],borderColor:'#111520'}]},options:{plugins:{legend:{labels:{color:'#8b97b3'}}}}})}
  if(page==='Calculators')calc()}
 function Dashboard(){const s=stats(),bal=S.capital+s.profit,rec=[...S.bets].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
- return head('Dashboard','Track your betting performance and profits',`<button class="p" onclick="go('My Bets');setTimeout(()=>$('#ev').focus(),50)">+ Place New Bet</button>`)+
+ return head('Dashboard','Track your betting performance and profits',`<button class="p" onclick="go('My Bets');openBet()">+ Place New Bet</button>`)+
  `<div class="grid g2"><div class="card"><div class="lbl">Starting capital</div><div class="big">${f(S.capital)}</div><a class="b" style="cursor:pointer;font-size:12px" onclick="const v=prompt('Starting capital',S.capital);if(v&&+v>0){S.capital=+v;cloud.cap();render()}">Set starting capital</a></div>
  <div class="card"><div class="lbl">Current balance</div><div class="big">${f(bal)}</div><span class="${s.profit>=0?'g':'r'}" style="font-size:12px">${s.profit>=0?'+':''}${f(s.profit)} from bets</span></div></div>
  <div class="grid g5"><div class="card"><div class="lbl">Total profit</div><div class="big">${f(s.profit)}</div></div><div class="card"><div class="lbl">Win rate</div><div class="big">${s.wr.toFixed(1)}%</div><span class="g">${s.w}W</span> - <span class="r">${s.l}L</span></div>
@@ -89,19 +96,49 @@ function Dashboard(){const s=stats(),bal=S.capital+s.profit,rec=[...S.bets].sort
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function Bankrolls(){return head('Bankrolls','Manage multiple bankrolls and track distinct strategies',`<button class="p" onclick="const n=prompt('Bankroll name');if(n){S.bankrolls.push(n);cloud.bank(n);render()}">+ Add bankroll</button>`)+
  `<div class="grid g2">${S.bankrolls.map(n=>{const bs=S.bets.filter(b=>b.bankroll===n),s=stats(bs);return`<div class="card"><b>${esc(n)}</b><div class="row" style="margin-top:10px"><div class="card" style="flex:1;text-align:center"><div class="lbl">ROI</div><div class="${s.roi>=0?'g':'r'}" style="font-size:18px">${s.roi.toFixed(2)}%</div></div><div class="card" style="flex:1;text-align:center"><div class="lbl">Profit</div><div class="${s.profit>=0?'g':'r'}" style="font-size:18px">${f(s.profit)}</div></div></div><p class="sub" style="margin:10px 0 0">${bs.filter(b=>b.status==='pending').length} pending bets</p></div>`}).join('')}</div>`}
-function Bets(){const sports=[...new Set(S.bets.map(b=>b.sport))],today=new Date().toISOString().slice(0,10);
- let l=S.bets.filter(b=>(!flt.sport||b.sport===flt.sport)&&(!flt.q||(b.event+b.sel).toLowerCase().includes(flt.q.toLowerCase()))).sort((a,b)=>b.date.localeCompare(a.date));
- return head('Betting History','Manage and track all your logged bets.',`<div class="row"><button onclick="demo()">Load demo data</button><button class="d" onclick="if(confirm('Delete all bets?')){S.bets=[];cloud.clear();render()}">Delete All Bets</button></div>`)+
- `<div class="card" style="margin-bottom:12px"><b>Log New Bet</b><div class="form" style="margin-top:10px"><input id="dt" type="date" value="${today}"><input id="ev" placeholder="Event (e.g. Arsenal vs Chelsea)"><input id="sl" placeholder="Selection"><input id="sp" placeholder="Sport" list="sl2"><datalist id="sl2">${['soccer','basketball','hockey','football','tennis'].map(x=>`<option>${x}</option>`).join('')}</datalist>
- <select id="ty">${['moneyline','spread','over under','prop','parlay'].map(x=>`<option>${x}</option>`).join('')}</select><input id="od" type="number" step="0.01" placeholder="Decimal odds"><input id="sk" type="number" step="0.01" placeholder="Stake"><select id="bk">${S.bankrolls.map(x=>`<option>${esc(x)}</option>`).join('')}</select></div><button class="p" onclick="addBet()">+ Log Bet</button></div>
- <div class="row" style="margin-bottom:12px"><input style="flex:3" placeholder="Search events or selections..." value="${esc(flt.q)}" oninput="flt.q=this.value;clearTimeout(window.t);window.t=setTimeout(()=>{render();const i=document.querySelector('input[placeholder^=Search]');i.focus();i.setSelectionRange(99,99)},250)"><select style="flex:1" onchange="flt.sport=this.value;render()"><option value="">All Sports</option>${sports.map(x=>`<option ${flt.sport===x?'selected':''}>${x}</option>`).join('')}</select></div>
- <div class="card tw"><table><tr><th>Date</th><th>Event</th><th>Selection</th><th>Odds</th><th>Stake</th><th>Status</th><th>Profit</th><th></th></tr>
- ${l.map(b=>`<tr><td class="sub" style="white-space:nowrap">${b.date}</td><td><b>${esc(b.event)}</b><div class="lbl">${esc(b.sport)}</div></td><td>${esc(b.sel)}</td><td><b>${(+b.odds).toFixed(2)}</b></td><td>${f(b.stake)}</td>
- <td><select style="width:auto" onchange="setSt('${b.id}',this.value)">${['pending','won','lost','push'].map(x=>`<option ${b.status===x?'selected':''}>${x}</option>`).join('')}</select></td><td class="${pr(b)>=0?'g':'r'}">${b.status==='pending'?'-':(pr(b)>=0?'+':'')+f(pr(b))}</td><td><button class="d" onclick="del('${b.id}')">✕</button></td></tr>`).join('')||'<tr><td colspan=8 class="sub">No bets found.</td></tr>'}</table></div>`}
-function addBet(){const g=i=>$('#'+i).value,o=+g('od'),k=+g('sk');if(!g('ev')||!(o>1)||!(k>0))return alert('Enter an event, decimal odds above 1, and a stake.');
- const nb={id:crypto.randomUUID(),date:g('dt'),event:g('ev'),sel:g('sl'),sport:(g('sp')||'other').toLowerCase(),type:g('ty'),odds:o,stake:k,status:'pending',bankroll:g('bk')};S.bets.push(nb);cloud.ins([nb]);render()}
+const SPORTS=['soccer','basketball','football','hockey','tennis','baseball','mma','other'],TYPES=['moneyline','spread','over under','prop','parlay'],STAT=['pending','won','lost','push'];
+let editId=null;
+const ICON={pending:'◔',won:'✓',lost:'✕',push:'–'},SCOL={pending:'#60a5fa',won:'var(--gr)',lost:'var(--rd)',push:'#f59e0b'};
+function rowsHTML(){const l=S.bets.filter(b=>(!flt.sport||b.sport===flt.sport)&&(!flt.q||(b.event+' '+b.sel+' '+b.sport).toLowerCase().includes(flt.q.toLowerCase()))&&(!flt.from||b.date>=flt.from)&&(!flt.to||b.date<=flt.to)).sort((a,b)=>b.date.localeCompare(a.date));
+ return l.map(b=>{const pp=b.status==='pending'?b.stake*(b.odds-1):pr(b),dt=new Date(b.date+'T00:00:00').toLocaleDateString('en',{month:'short',day:'numeric',year:'numeric'});
+ return `<tr><td class="sub" style="white-space:nowrap">${dt}</td><td><b>${esc(b.event)}</b><div class="lbl" style="text-transform:capitalize">${esc(b.sport||'')}</div></td><td>${esc(b.sel||'')}</td><td><b>${(+b.odds).toFixed(2)}</b></td><td>${f(b.stake)}</td>
+ <td style="color:${SCOL[b.status]};white-space:nowrap"><span class="si" style="border-color:${SCOL[b.status]}">${ICON[b.status]}</span>${b.status[0].toUpperCase()+b.status.slice(1)}</td>
+ <td class="${pp>=0?'g':'r'}" style="font-weight:600;white-space:nowrap">${pp>=0?'+':''}${f(pp)}</td><td style="white-space:nowrap"><button class="chip" onclick="openBet('${b.id}')">✎</button> <button class="chip d" onclick="del('${b.id}')">🗑</button></td></tr>`}).join('')||'<tr><td colspan=8 class="sub">No bets found.</td></tr>'}
+function refresh(){const t=$('#tb');if(t)t.innerHTML=rowsHTML()}
+function rng(k){const n=new Date(),y=n.getFullYear(),m=n.getMonth(),d=n.getDate();let a='',b='';
+ if(k==='t')a=b=iso(n);if(k==='y')a=b=iso(new Date(y,m,d-1));if(k==='m'){a=iso(new Date(y,m,1));b=iso(new Date(y,m+1,0))}
+ if(k==='l'){a=iso(new Date(y,m-1,1));b=iso(new Date(y,m,0))}if(k==='y2'){a=iso(new Date(y,0,1));b=iso(n)}
+ flt.from=a;flt.to=b;$('#df').value=a;$('#dt2').value=b;refresh()}
+function Bets(){const sports=[...new Set([...SPORTS.slice(0,5),...S.bets.map(b=>b.sport)])].filter(Boolean);
+ return `<div class="top"><div><h1>Betting History</h1><div class="sub">Manage and track all your logged bets.</div></div><button class="p" onclick="openBet()">+ Log New Bet</button></div>
+ <div class="card row" style="justify-content:space-between;margin-bottom:14px"><div><b>Start Over</b><div class="sub" style="margin:2px 0 0;font-size:12px">Clear all bets and reset your history. Your starting capital stays.</div></div><button class="d" onclick="if(confirm('Delete all bets? This cannot be undone.')){S.bets=[];cloud.clear();render()}">🗑 Delete All Bets</button></div>
+ <div class="row" style="margin-bottom:10px"><div class="sch"><span>⌕</span><input placeholder="Search teams, players, or sports..." value="${esc(flt.q)}" oninput="flt.q=this.value;refresh()"></div>
+ <select style="width:150px" onchange="flt.sport=this.value;refresh()"><option value="">All Sports</option>${sports.map(x=>`<option ${flt.sport===x?'selected':''}>${esc(x)}</option>`).join('')}</select>
+ <div class="row"><input id="df" type="date" style="width:auto" value="${flt.from||''}" onchange="flt.from=this.value;refresh()"><span class="sub" style="margin:0">–</span><input id="dt2" type="date" style="width:auto" value="${flt.to||''}" onchange="flt.to=this.value;refresh()"></div></div>
+ <div class="row" style="margin-bottom:14px">${[['t','Today'],['y','Yesterday'],['m','This Month'],['l','Last Month'],['y2','Year to Date'],['','Clear']].map(([k,l])=>`<button class="chip" onclick="rng('${k}')">${l}</button>`).join('')}</div>
+ <div class="card tw" style="padding:0"><table><tr><th>Date</th><th>Event</th><th>Selection</th><th>Odds</th><th>Stake</th><th>Status</th><th>Profit</th><th>Actions</th></tr><tbody id="tb">${rowsHTML()}</tbody></table></div>`}
+function openBet(id){editId=id||null;closeBet();const b=id?S.bets.find(x=>x.id===id):null,v=b||{date:iso(new Date()),type:'moneyline',sport:'',status:'pending',event:'',sel:'',odds:'',stake:'',bankroll:S.bankrolls[0]};
+ const o=(a,sel)=>a.map(x=>`<option ${x===sel?'selected':''}>${esc(x)}</option>`).join(''),sp=[...new Set([...SPORTS,v.sport].filter(Boolean))];
+ const m=document.createElement('div');m.id='modal';m.className='ov';m.onclick=e=>{if(e.target===m)closeBet()};
+ m.innerHTML=`<div class="md"><div class="row" style="justify-content:space-between;margin-bottom:16px"><h2 style="margin:0;font-size:18px">${b?'Edit Bet':'Add Bet'}</h2><a style="cursor:pointer;color:var(--mu)" onclick="closeBet()">✕</a></div>
+ <div class="form2"><div><label>Date</label><input id="m_dt" type="date" value="${v.date}"></div><div><label>Bet Type</label><select id="m_ty">${o(TYPES,v.type)}</select></div>
+ <div><label>Sport</label><select id="m_sp"><option value="">Select sport</option>${o(sp,v.sport)}</select></div><div><label>Status</label><select id="m_st" onchange="calcP()">${o(STAT,v.status)}</select></div>
+ <div class="sp"><label>Match / Event</label><input id="m_ev" placeholder="Bayern vs Barcelona" value="${esc(v.event)}"></div>
+ <div class="sp"><label>Your Pick</label><input id="m_sl" placeholder="Over 1.5 goals + Over 7.5 corners" value="${esc(v.sel||'')}"></div>
+ <div><label>Odds (Decimal)</label><input id="m_od" type="number" step="0.01" placeholder="1.78" value="${v.odds}" oninput="calcP()"></div><div><label>Stake (€)</label><input id="m_sk" type="number" step="0.01" placeholder="750" value="${v.stake}" oninput="calcP()"></div>
+ ${S.bankrolls.length>1?`<div class="sp"><label>Bankroll</label><select id="m_bk">${o(S.bankrolls,v.bankroll)}</select></div>`:''}
+ <div class="sp card row" style="justify-content:space-between;background:#0d111b"><span class="sub" style="margin:0">Calculated Profit:</span><b id="m_cp" style="font-size:16px">€0.00</b></div></div>
+ <div class="row" style="justify-content:flex-end;margin-top:16px"><button onclick="closeBet()" style="border:0;background:none">Cancel</button><button class="p" onclick="saveBet()">Save Bet</button></div></div>`;
+ document.body.appendChild(m);calcP()}
+function closeBet(){const m=$('#modal');if(m)m.remove()}
+function calcP(){const o=+$('#m_od').value,k=+$('#m_sk').value,st=$('#m_st').value,p=st==='won'?k*(o-1):st==='lost'?-k:0,e=$('#m_cp');e.textContent=f(p);e.className=p>0?'g':p<0?'r':''}
+function saveBet(){const g=i=>$('#m_'+i).value,o=+g('od'),k=+g('sk');
+ if(!g('ev')||!(o>1)||!(k>0))return alert('Enter an event, decimal odds above 1, and a stake.');
+ const r={date:g('dt'),event:g('ev'),sel:g('sl'),sport:(g('sp')||'other').toLowerCase(),type:g('ty'),odds:o,stake:k,status:g('st'),bankroll:$('#m_bk')?g('bk'):S.bankrolls[0]};
+ if(editId){Object.assign(S.bets.find(b=>b.id===editId),r);cloud.updRow(editId,r)}else{const nb={id:crypto.randomUUID(),...r};S.bets.push(nb);cloud.ins([nb])}
+ closeBet();render()}
 const setSt=(id,v)=>{S.bets.find(b=>b.id===id).status=v;cloud.upd(id,v);render()};
-const del=id=>{S.bets=S.bets.filter(b=>b.id!==id);cloud.del(id);render()};
+const del=id=>{if(!confirm('Delete this bet?'))return;S.bets=S.bets.filter(b=>b.id!==id);cloud.del(id);render()};
 function demo(){const rows=[],sp=['soccer','soccer','soccer','basketball','hockey','tennis','football'],ty=['moneyline','over under','prop','spread','parlay'],now=Date.now();
  for(let i=0;i<40;i++){const o=+(1.3+Math.random()*.9).toFixed(2);rows.push({id:crypto.randomUUID(),date:new Date(now-Math.floor(i/2)*864e5).toISOString().slice(0,10),event:'Demo Match '+(i+1),sel:'Team to win',sport:sp[i%7],type:ty[i%5],odds:o,stake:250,status:Math.random()<.7?'won':'lost',bankroll:S.bankrolls[0]})}S.bets.push(...rows);cloud.ins(rows);render()}
 let calSel=null;
